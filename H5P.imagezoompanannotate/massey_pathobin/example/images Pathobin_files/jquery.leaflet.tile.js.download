@@ -1,0 +1,297 @@
+(function($){
+    var mapOverlay;
+    var map;
+    $("a[google-tile]").click(
+        function () {
+            var image_type =  $(this).attr('image-type');
+            if (image_type == "image2D") {
+                // used in mobile platform only.
+                if ($(this).parent().parent().attr('class') == 'pagination') {
+                    $(this).parent().parent().children('li').each(function () {
+                        $(this).attr('class', '');
+                    });
+                    $(this).parent().attr('class', 'active');
+                }
+
+                var tile_url = $(this).attr('tile-url');
+                tile_url = tile_url.replace(/\?signature.*?$/i,"");
+    
+                if (!validUrl(tile_url + '/blank.png')) {
+                    $('#map-canvas').html('Your image is being tiled.' +
+                        ' It may take a second or few minutes depending on our server load.' +
+                        ' Click refresh to see if it is ready.');
+                    return;
+                }
+
+                var output = getZoomLevel(tile_url + '/zoom.json');
+                zoom = output[0];
+                ext = output[1];
+                if (zoom == -1) {
+                    zoom = parseInt($(this).attr('zoom'));
+                }
+
+                if (map != null) {
+                    map.remove();
+                }
+                
+                initialZoom = zoom >= 1 ? 1 : 0;
+                map = L.map('map-canvas').setView([0, 0], initialZoom);
+                L.tileLayer(tile_url + '/{z}/{y}/{x}' + ext, {
+                    attribution: $(this).attr('title'),
+                    maxZoom: zoom,
+                    noWrap : true,
+                    errorTileUrl : tile_url + '/blank.png',
+                    continousWorld : false
+                }).addTo(map);
+
+
+                // full screen view
+                if (mapOverlay != null) {
+                    mapOverlay.remove();
+                }
+                
+                initialZoom = zoom >= 2 ? 2 : 0;
+                $('#currentzoom').html(initialZoom);
+                mapOverlay = L.map(
+                    'map-canvas-overlay', 
+                    {crs: L.CRS.Simple}).setView([-150, 150], 
+                    initialZoom
+                );
+                L.tileLayer(tile_url + '/{z}/{y}/{x}' + ext, {
+                    attribution: $(this).attr('title'),
+                    maxZoom: zoom,
+                    noWrap : true,
+                    errorTileUrl : tile_url + '/blank.png',
+                    continousWorld : false,
+                    preferCanvas : true
+                }).addTo(mapOverlay);
+
+                // draw features
+                var drawnItems = new L.FeatureGroup().addTo(mapOverlay);
+
+                mapOverlay.addControl(new L.Control.Draw({
+                    draw: {
+                        dimension: {
+                            metric: true,
+                            shapeOptions: { color: '#004a80' },
+                            showLength: false
+                        },
+                        rectangle: { shapeOptions: { color: '#004a80' }},
+                        circle: { shapeOptions: { color: '#004a80' }},
+                        polygon: false,
+                        polyline: false,
+                        marker: false,
+                        arrow: {shapeOptions: { color: '#004a80' }}
+                    }
+                }));
+
+                mapOverlay.addControl(new L.Illustrate.Control({
+                    draw: {
+                        pointer: false
+                    },
+                    edit: { featureGroup: drawnItems }
+                }));
+                
+                mapOverlay.on('draw:created', function(event) {
+                    addMarkers(d3.select("svg"));
+                    drawnItems.addLayer(event.layer);
+                });
+
+                mapOverlay.on('draw:edited', function (e) {
+                    var layers = e.layers;
+                    var countOfEditedLayers = 0;
+                    layers.eachLayer(function(layer) {
+                        countOfEditedLayers++;
+                    });
+                    console.log("Edited " + countOfEditedLayers + " layers");
+                });
+
+                mapOverlay.on('zoom', function (e) {
+                    $('#currentzoom').html(e.target._zoom);
+                });
+
+                var description = $('.image-detail');
+                if(description != null){
+                    description.find('.camera').text($(this).attr('image-camera') || String.fromCharCode(160));
+                    description.find('.microscope').text($(this).attr('image-microscope') || String.fromCharCode(160));
+                    description.find('.magnification').text($(this).attr('image-magnification') || String.fromCharCode(160))
+                    description.find('.stain').text($(this).attr('image-stain') || String.fromCharCode(160));
+                }
+
+                var button = description.find('#update-button');
+                if (button.length == 1) {
+                    button.attr('image-id', button.attr('image-id').replace(/\d+/, $(this).attr('image-id')));
+                }
+
+                var remove_button = description.find('#remove-button');
+                if (remove_button.length == 1) {
+                    if ($(this).attr('cover-image') == 'True') {
+                        remove_button.hide();
+                    }
+                    else {
+                        remove_button.show();
+                        remove_button.attr('href', remove_button.attr('href').replace(/\d+/, $(this).attr('image-id')));
+                    }
+                }
+
+                var download_button = $('#download-button');
+                if (download_button != null && download_button.attr('href', download_button.attr('href').replace(/\d+/, $(this).attr('image-id'))));
+            }
+        }
+    );
+
+
+    // document.getElementById('snap').addEventListener('click', function() {
+    //     leafletImage(mapOverlay, doImage);
+    // });
+
+    function doImage(err, canvas) {
+        var svg = $('svg');
+        var el = $('#map-canvas-overlay .leaflet-map-pane .leaflet-popup-pane .leaflet-draw-tooltip-single');
+        var counter = 0,
+            totalLayers = svg.length + el.length;
+        var ctx = canvas.getContext("2d");
+        var pane = $('#map-canvas-overlay .leaflet-map-pane');
+        var isChrome = navigator.userAgent.indexOf('Chrome') > -1;
+        var isSafari = navigator.userAgent.indexOf("Safari") > -1;
+        if (isChrome && isSafari) {
+            isSafari = false;
+        }
+
+        if (svg.length > 0) {
+            var img = new Image();
+            var svgString = new XMLSerializer().serializeToString(svg[0]);
+            if (isSafari) {
+                var url = "data:image/svg+xml," + svgString;
+            } else {
+                var DOMURL = self.URL || self.webkitURL || self;
+                var svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
+                var url = DOMURL.createObjectURL(svgBlob);
+            }
+            img.onload = function() {
+                var left = parseInt($('svg').css('left').replace("px", ""))
+                    + parseInt(pane.css('left').replace("px", ""));
+                var top = parseInt($('svg').css('top').replace("px", ""))
+                    + parseInt(pane.css('top').replace("px", ""));
+                ctx.drawImage(img, left, top);
+                counter ++;
+                if (counter == totalLayers) {
+                    generateImage(canvas);
+                }
+            };
+            img.src = url;
+        }
+
+        if (el.length > 0) {
+            el.each(function (key, value) {
+                html2canvas(value, {
+                    onrendered: function (canvas2) {
+                        var left = parseInt($(value).css('left').replace("px", "")) 
+                            + parseInt(pane.css('left').replace("px", ""));
+                        var top = parseInt($(value).css('top').replace("px", ""))
+                            + parseInt(pane.css('top').replace("px", ""));
+                        ctx.drawImage(canvas2, left, top);
+                        counter ++;
+                        if (counter == totalLayers) {
+                            generateImage(canvas);
+                        }
+                    }
+                });
+            });
+        }
+
+        if (totalLayers == 0) {
+            generateImage(canvas);
+        }
+    }
+
+    $("#showMapOverlay").on('shown.bs.modal', function () {
+        mapOverlay.invalidateSize();
+        // mapOverlay.setCenter(new google.maps.LatLng(0, 0));
+        $("#showHelp").modal('show');
+        setTimeout(function() {$('#showHelp').modal('hide');}, 1000);
+    });
+
+    function generateImage(canvas) {
+        var png = canvas.toDataURL("image/png");
+        var link = document.createElement("a");
+        link.download = "export.png";
+        link.href = png;
+        var eventObj = document.createEvent('MouseEvents');
+        eventObj.initEvent('click', true, true);
+        link.dispatchEvent(eventObj);
+        // link.click();
+        link.remove();
+        DOMURL.revokeObjectURL(png);
+    }
+
+    function validUrl(url){
+        var isValid = false;
+        $.ajax({url: url + "?preventCache=" + Date.now(),
+            type: "HEAD",
+            timeout:2000,
+            async: false,
+            statusCode: {
+                200: function (response) {
+                    isValid = true;
+                },
+                304: function (response) {
+                    isValid = true;
+                },
+            }
+        });
+
+        return isValid;
+    }
+
+    function getZoomLevel(url){
+        var zoom = -1;
+        var extension = '.png';
+        $.ajax({url: url,
+            type: "GET",
+            dataType: 'json',
+            timeout:2000,
+            async: false,
+            success: function(data){
+                zoom = data['zoom'];
+                if(data['extension'] != undefined)
+                    extension = data['extension'];
+            }
+        });
+
+        return [zoom, extension];
+    }
+
+    function addMarkers(svg) {
+        if (!svg.select("defs").empty()) {
+            return;
+        }
+        defs = svg.append("defs")
+        defs.append("marker")
+            .attr("id", "arrow-right")
+            .attr("refX", 0)
+            .attr("refY", 2)
+            .attr("markerWidth", 10)
+            .attr("markerHeight", 10)
+            .attr("markerUnits", "strokeWidth")
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,0 L0,4 L6,2 z")
+            .attr("fill", "#004a80");
+
+        defs.append("marker")
+            .attr("id", "arrow-left")
+            .attr("refX", 0)
+            .attr("refY", 2)
+            .attr("markerWidth", 10)
+            .attr("markerHeight", 10)
+            .attr("markerUnits", "strokeWidth")
+            .attr("orient", "auto-start-reverse")
+            .append("path")
+            .attr("d", "M0,0 L0,4 L6,2 z")
+            .attr("fill", "#004a80");
+    }
+
+    var list = $("a[google-tile]");
+    list[0].click();
+}(jQuery));

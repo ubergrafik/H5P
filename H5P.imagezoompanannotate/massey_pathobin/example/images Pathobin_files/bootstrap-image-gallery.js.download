@@ -1,0 +1,116 @@
+/*
+ * Bootstrap Image Gallery 3.0.1
+ * https://github.com/blueimp/Bootstrap-Image-Gallery
+ *
+ * Copyright 2013, Sebastian Tschan
+ * https://blueimp.net
+ *
+ * Licensed under the MIT license:
+ * http://www.opensource.org/licenses/MIT
+ */
+
+/*global define, window */
+
+(function (factory) {
+    'use strict';
+    if (typeof define === 'function' && define.amd) {
+        define([
+            'jquery',
+            './blueimp-gallery'
+        ], factory);
+    } else {
+        factory(
+            window.jQuery,
+            window.blueimp.Gallery
+        );
+    }
+}(function ($, Gallery) {
+    'use strict';
+
+    $.extend(Gallery.prototype.options, {
+        useBootstrapModal: true,
+        toggleControlsOnReturn: false
+    });
+
+    var close = Gallery.prototype.close,
+        imageFactory = Gallery.prototype.imageFactory,
+        videoFactory = Gallery.prototype.videoFactory,
+        textFactory = Gallery.prototype.textFactory;
+
+    $.extend(Gallery.prototype, {
+
+        modalFactory: function (obj, callback, factoryInterface, factory) {
+            if (!this.options.useBootstrapModal || factoryInterface) {
+                return factory.call(this, obj, callback, factoryInterface);
+            }
+            var that = this,
+                modalTemplate = this.container.children('.modal'),
+                modal = modalTemplate.clone().show()
+                    .on('click', function (event) {
+                        // Close modal if click is outside of modal-content:
+                        if (event.target === modal[0] ||
+                                event.target === modal.children()[0]) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            that.close();
+                        }
+                    }),
+                element = factory.call(this, obj, function (event) {
+                    callback({
+                        type: event.type,
+                        target: modal[0]
+                    });
+                    modal.addClass('in');
+                }, factoryInterface);
+            modal.find('.modal-title').text(element.title || String.fromCharCode(160));
+			
+			// Additional attributes for pathobin purposes.
+			modal.find('.camera').text(obj.getAttribute('image-camera') || String.fromCharCode(160));
+			modal.find('.microscope').text(obj.getAttribute('image-microscope') || String.fromCharCode(160));
+			modal.find('.magnification').text(obj.getAttribute('image-magnification') || String.fromCharCode(160))
+			modal.find('.stain').text(obj.getAttribute('image-stain') || String.fromCharCode(160));
+            
+            var a = modal.find('.modal-body a');
+			a.append(element);
+            a.attr('href', a.attr('href').replace('0', obj.getAttribute('image-id')));
+
+            // Additional attributes for pathobin purposes.
+            var button = modal.find('#update-button');
+            if (button.length == 1) {
+                button.attr('image-id', button.attr('image-id').replace('0', obj.getAttribute('image-id')));
+            }
+
+            var remove_button = modal.find('#remove-button');
+            if (remove_button.length == 1) {
+                if (obj.getAttribute('cover-image') == 'true') {
+                    remove_button.hide();
+                }
+                else {
+                    remove_button.attr('href', remove_button.attr('href').replace('0', obj.getAttribute('image-id')));
+                }
+            }
+            
+            return modal[0];
+        },
+
+        imageFactory: function (obj, callback, factoryInterface) {
+            return this.modalFactory(obj, callback, factoryInterface, imageFactory);
+        },
+
+        videoFactory: function (obj, callback, factoryInterface) {
+            return this.modalFactory(obj, callback, factoryInterface, videoFactory);
+        },
+
+        textFactory: function (obj, callback, factoryInterface) {
+            return this.modalFactory(obj, callback, factoryInterface, textFactory);
+        },
+
+        close: function () {
+            this.container.find('.modal').removeClass('in');
+            close.call(this);
+        }
+
+    });
+
+}));
+

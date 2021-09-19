@@ -1,0 +1,836 @@
+$('.basicAutoComplete').each(function () {
+    $(this).autoComplete(
+        {minLength: 1}
+    )
+});
+$('.dropdown-menu').css({'top': 'auto', 'left': 'auto'})
+
+$(function () {
+    'use strict';
+
+    // Initialize the jQuery File Upload widget:
+    $('#fileupload').fileupload({
+    });
+
+    // Load existing files:
+    $('#fileupload').addClass('fileupload-processing');
+    $.ajax({
+        // Uncomment the following to send cross-domain cookies:
+        //xhrFields: {withCredentials: true},
+        url: $('#fileupload').fileupload('option', 'url'),
+        dataType: 'json',
+        context: $('#fileupload')[0]
+    }).always(function () {
+        $(this).removeClass('fileupload-processing');
+    }).done(function (result) {
+        $(this).fileupload('option', 'done')
+            .call(this, $.Event('done'), {result: result});
+    });
+
+    $('#addImage').on('hidden.bs.modal', function () {
+        location.reload();
+    });
+});
+
+// $(function () {
+//     'use strict';
+    
+//     // Initialize the jQuery File Upload widget:
+//     $('#fileupload3d').fileupload({
+//         replaceFileInput: false,
+
+       
+//     });
+    
+//     // Load existing files:
+//     $('#fileupload3d').addClass('fileupload-processing');
+//     $.ajax({
+//         // Uncomment the following to send cross-domain cookies:
+//         //xhrFields: {withCredentials: true},
+//         url: $('#fileupload3d').fileupload('option', 'url'),
+//         //xhrFields: {
+//         //    withCredentials: true
+//         //},
+//         dataType: 'json',
+//         context: $('#fileupload3d')[0]
+//     }).always(function () {
+//         $(this).removeClass('fileupload-processing');
+//     }).done(function (result) {
+//         $(this).fileupload('option', 'done')
+//             .call(this, $.Event('done'), {result: result});
+//     });
+    
+
+//     $('#image3d').on('hidden.bs.modal', function () {
+//        location.reload();
+//     });
+// });
+
+function getDoc(frame) {
+    var doc = null;
+
+    // IE8 cascading access check
+    try {
+     if (frame.contentWindow) {
+         doc = frame.contentWindow.document;
+     }
+    } catch(err) {
+    }
+
+    if (doc) { // successful getting content
+     return doc;
+    }
+
+    try { // simply checking may throw in ie8 under ssl or mismatched protocol
+     doc = frame.contentDocument ? frame.contentDocument : frame.document;
+    } catch(err) {
+     // last attempt
+     doc = frame.document;
+    }
+    return doc;
+}
+
+$(document).ready(function(){//$('#add3dImage').click(function (e) {
+    // $('[for="id_caseId"]').each(function() {
+    //     $(this).after($('<span>').text(" *").css('color','red'));
+    // });
+    // $('[for="id_diagnosis"]').each(function() {
+    //     $(this).after($('<span>').text(" *").css('color','red'));
+    // });
+    $('#fileuploaderror').html('');
+    var g_progress_intv = 500;
+    function random_character(){
+        var chars = "0123456789abcdefghijklmnopqurstuvwxyzABCDEFGHIJKLMNOPQURSTUVWXYZ";
+        return chars.substr( Math.floor(Math.random() * 62), 1);
+    }
+
+    function random_string(length){
+        var str = ''
+        for (var i=0; i< length; i++){
+            str += random_character()
+        }
+
+        return str;
+    }
+
+    $('#X-Progress-ID').val(random_string(5));
+    $('#fileupload3d').attr('action', $('#fileupload3d').attr('action') + '?X-Progress-ID='+$('#X-Progress-ID').val());   
+    $('#fileupload3d').submit(function(event){
+        event.preventDefault();
+        startProgressBarUpdate($('#X-Progress-ID').val());
+
+        //var formObj = $(event.target);
+        var formObj = $(event.target);
+        //var formObj = $(this);
+        //var formURL = formObj.attr("action");
+        //var formData = new FormData(this);
+        
+        $(this).ajaxSubmit({
+            data: formObj.serialize(),
+            type: 'POST',
+            url: formObj.attr('action'),
+            dataType: 'json',
+            success: function(data){
+                if (data.redirect) {
+                    // data.redirect contains the string URL to redirect to
+                    
+                    //window.location.href = data.redirect + "#image3d";
+
+                    window.location.hash = "#image3d";
+                    location.reload();
+                }
+                else if(data.errors){
+                    var messages = '';
+                    for (var key in data.errors) {
+                        messages += data.errors[key];
+                    }
+
+                    $('#fileuploaderror').html(messages);
+                    $('#fileuploaderror').show();
+
+                    $(".progress-bar").attr('style', 'width:0%;');
+                    $(".progress-bar .sr-only").html('0% Complete');
+                }
+            }
+        });
+        
+        return true;
+    });
+
+    $('#addFileForm').submit(function(event) {
+        event.preventDefault();
+        var formObj = $(event.target);
+
+        $(this).ajaxSubmit({
+            data: formObj.serialize(),
+            type: 'POST',
+            url: formObj.attr('action'),
+            dataType: 'json',
+            success: function(data){
+                if (data.redirect) {
+                    window.location.hash = "#Files-Pane";
+                    location.reload();
+                }
+                else if(data.errors){
+                    var messages = '';
+                    for (var key in data.errors) {
+                        messages += data.errors[key];
+                    }
+
+                    $('#casefileuploaderror').html(messages);
+                    $('#casefileuploaderror').show();
+
+                }
+            }
+        });
+        
+        return true;
+    });
+
+    function startProgressBarUpdate(upload_id) {
+        if(g_progress_intv != 0)
+            clearInterval(g_progress_intv);
+        g_progress_intv = setInterval(function() {
+            $.getJSON("/upload_progress?X-Progress-ID=" + upload_id, function(data) {
+                if (data == null) {
+                    if($('#fileuploaderror').html() != ''){                            
+                        $(".progress-bar").attr('style', 'width:0%;');
+                        $(".progress-bar .sr-only").html('0% Complete');
+                    }
+                    else{
+                        $(".progress-bar").attr('style', 'width:100%;');
+                        $(".progress-bar .sr-only").html('100% Complete');
+                    }
+                    
+                    clearInterval(g_progress_intv);
+                    g_progress_intv = 0;
+                    return;
+                }
+                
+                var percentage = Math.floor(100 * parseInt(data.uploaded) / parseInt(data.length));
+                $(".progress-bar").attr('style', 'width:' + percentage + '%;');
+                $(".progress-bar .sr-only").html(percentage + '% Complete');
+                console.log(percentage);
+            });
+        }, 1);
+    }
+    // $("#fileupload3d").submit(function(e)
+    // {
+    //   e.preventDefault();
+    //   startProgressBarUpdate($('#X-Progress-ID').val());
+
+    //   var formObj = $(this);
+    //   var formURL = formObj.attr("action");
+
+    //   if(window.FormData !== undefined)  // for HTML5 browsers
+    //   {
+
+    //     var formData = new FormData(this);
+    //     $.ajax({
+    //       url: formURL,
+    //       crossDomain: true,
+    //       //xhrFields: { withCredentials: true },
+    //       type: 'POST',
+    //       data:  formData,
+    //       dataType: 'json',
+    //       mimeType:"multipart/form-data",
+    //       contentType: false,
+    //       cache: false,
+    //       processData:false,
+        
+    //       statusCode: {
+    //         403: function(jqXHR, text, error) {
+    //             console.log(error);
+    //             $('#fileuploaderror').html(args["picMtl"]);
+    //             $('#fileuploaderror').show();
+    //         },
+    //         200: function(args, text, jqXHR) {
+    //             console.log(args);
+    //             if (args["picObj"] != "")
+    //             {
+    //                 $('#fileuploaderror').html(args["picObj"]);
+    //                 $('#fileuploaderror').show();
+    //             }
+    //             else if (args["picMtl"] != "")
+    //             {
+    //                 $('#fileuploaderror').html(args["picMtl"]);
+    //                 $('#fileuploaderror').show();
+    //             }
+    //             else if (args["picJpg"] != "")
+    //             {
+    //                 $('#fileuploaderror').html(args["picJpg"]);
+    //                 $('#fileuploaderror').show();
+    //             }
+    //             else
+    //             {
+    //                 window.location.hash = "#image3d";
+    //                 location.reload();
+    //             }
+    //         }
+    //       }
+    //     });
+    //   //$(this).unbind(e);
+    //   }
+    //   else  //for older browsers
+    //   {
+    //     $('#fileuploaderror').html("Browser version is not supported.");
+    //     $('#fileuploaderror').show();
+    //   }  
+    // });      
+
+    
+});
+
+
+$('#mytab a').click(function (e) {
+    e.preventDefault();
+    $(this).tab('show');
+});
+
+// store the currently selected tab in the hash value
+$("ul.nav-tabs > li > a").on("shown.bs.tab", function (e) {
+    var id = $(e.target).attr("href").substr(1);
+    window.location.hash = id;
+});
+
+// on load of the page: switch to the currently selected tab
+var hash = window.location.hash;
+$('#myTab a[href="' + hash + '"]').tab('show');
+
+var selDiv;
+    
+$(function () {
+    $('#id_picture3D').on('change', handleFileSelect);
+});
+
+function handleFileSelect(e) {
+    if (!e.target.files || !window.FileReader) return;
+    selDiv = $('#selectedFiles3D');
+    selDiv.html('');
+    
+    var files = e.target.files;
+    var filesArr = Array.prototype.slice.call(files);
+    filesArr.forEach(function(f) {
+        if(!f.type.match("image.*")) {
+            return;
+        }
+
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            selDiv.append("<tr><td><img src=\"" + e.target.result + "\" width=\"100\"></td><td>" + f.name + "</td></tr>");           
+        }
+        reader.readAsDataURL(f);         
+    });
+}
+
+if (RegExp('multipage', 'gi').test(window.location.search)) {
+    introJs().setOption('doneLabel', 'Next page').start().oncomplete(function() {
+        window.location.href = '/accounts/profile?multipage=true';
+    });
+}
+
+var viewer = [];
+var rotateVar;
+function setDelete3dbuttonURL() {
+    var description = $('.image3d-detail');
+    var remove_button = description.find('#remove-image3d-button');
+    if (remove_button.length > 0)
+    {
+        remove_button.show();
+        var image3d_doc =  document.getElementById('image3d');
+        var image3d_chosen = image3d_doc.getElementsByClassName('item active')[0];
+        if(typeof image3d_chosen != 'undefined'){
+            var image3d_id = image3d_chosen.getElementsByTagName("a")[0].getAttribute('image-id');
+            remove_button.attr('href', remove_button.attr('href').replace(/\d+/,image3d_id ));
+        }
+    }
+};
+
+function setFullScreen3dbuttonURL() {
+    var description = $('.image3d-detail');
+    var fullscreen3d_button = description.find('#fullscreen3d');
+    //var image3d_url = next.find('.collection-thumbnail').attr('image-url');
+    if (fullscreen3d_button.length > 0)
+    {
+        fullscreen3d_button.show();
+        var image3d_doc =  document.getElementById('image3d');
+        var image3d_chosen = image3d_doc.getElementsByClassName('item active')[0];
+        if(typeof image3d_chosen != 'undefined'){
+            var image3d_url = image3d_chosen.getElementsByTagName("a")[0].getAttribute('image-url');
+            fullscreen3d_button.attr('image-url', image3d_url );
+        }
+    }     
+};
+
+function showOrHideNextPrevCarousel() {
+    curSlide = $('#myCarousel2 .active');
+    if(curSlide.is( ':first-child' )) {
+        $('#carouselPrev').hide();
+    } else {
+        $('#carouselPrev').show();   
+    }
+    if (curSlide.is( ':last-child' )) {
+        $('#carouselNext').hide();
+    } else {
+        $('#carouselNext').show();      
+    }
+};
+
+$("a[image-threeD]").click(function(e) {
+    e.preventDefault();
+});
+
+function show3dImages() {
+    var list = $("a[image-threeD]");
+    for (i = 0; i < list.length; i++) { 
+        var image_type =  $(list[i]).attr('image-type');
+        if (image_type =="image3D") {
+            var image_id =  $(list[i]).attr('image-id');
+            var image3d_url = $(list[i]).attr('image-url');
+            
+            viewer = new JSC3D.Viewer(document.getElementById("cv" + image_id));
+            viewer.setParameter('SceneUrl',     image3d_url.split("?")[0]); 
+            viewer.setParameter('RenderMode', 'texture');
+            viewer.setParameter('Renderer', 'webgl');
+            //viewer.setParameter('ProgressBar', 'off');
+            viewer.init();
+            viewer.update();
+
+            // var sonic = new Sonic({
+            //             width: 100, 
+            //             height: 100, 
+            //             stepsPerFrame: 3, 
+            //             trailLength: 1, 
+            //             pointDistance: .01, 
+            //             fps: 30, 
+            //             step: 'fader', 
+            //             strokeColor: '#D4FF00', 
+            //             setup: function() {
+            //                 this._.lineWidth = 6;
+            //             }, 
+            //             path: [
+            //                 ['arc', 50, 50, 20, 360, 0]
+            //             ]
+            // });
+            // document.getElementById('loading').appendChild(sonic.canvas);
+            // showProgress(true);
+
+            // viewer.onloadingcomplete = viewer.onloadingaborted = viewer.onloadingerror = function() {
+            //     showProgress(false);
+            // };
+
+            // function changeGraphicQuality() {
+            //     viewer.setDefinition(document.getElementById('quality').checked ? 'high' : 'standard');
+            //     viewer.update();
+            // }
+
+            // function showProgress(show) {
+            //     if(show) {
+            //         sonic.play();
+            //         document.getElementById('loading').style.display = 'block';
+            //     }
+            //     else {
+            //         sonic.stop();
+            //         document.getElementById('loading').style.display = 'none';
+            //     }
+            // }
+        }
+    }
+    setDelete3dbuttonURL();
+    showOrHideNextPrevCarousel();
+};
+
+$('#rotatebutton').click(function(e) {
+    e.preventDefault();
+    
+    if ($(this).attr('value')== "Rotate") {
+        $(this).attr('value', "Stop") 
+        rotateVar = setInterval(function(){viewer.rotate(0, 3, 0); viewer.update();}, 60);  
+    } else {
+        $(this).attr('value', "Rotate");  
+        clearInterval(rotateVar);
+    }
+});
+
+$( document ).ready(function() {         
+    show3dImages();
+    setFullScreen3dbuttonURL();
+    
+});
+
+$('#fullscreen3d').click(function(e) {
+    e.preventDefault();
+    //var list = $("a[image-threeD]");
+    //for (i = 0; i < list.length; i++) {  
+    var image3d_url =  $(this).attr('image-url');
+    //var image3d_url = $(list[i]).attr('image-url');
+    
+    var canvas = document.getElementById("cvfull");//+ image_id);
+    canvas.width = window.innerWidth; 
+    canvas.height = window.innerHeight;
+    viewer = new JSC3D.Viewer(document.getElementById("cvfull"));// + image_id));
+    viewer.setParameter('SceneUrl',     image3d_url.split("?")[0]); 
+    viewer.setParameter('RenderMode', 'texture');
+    viewer.setParameter('Renderer', 'webgl');
+    viewer.init();
+    viewer.update();
+    //}
+    
+    //setDelete3dbuttonURL();
+    //showOrHideNextPrevCarousel3();
+});
+
+$('#myCarousel2').on('slide.bs.carousel', function (e) {
+    var next = $(e.relatedTarget);
+    var image3d_id = next.find('.collection-thumbnail').attr('image-id');
+    var description = $('.image3d-detail');
+    var remove_button = description.find('#remove-image3d-button');
+    if (remove_button.length > 0)
+    {
+        remove_button.attr('href', remove_button.attr('href').replace(/\d+/,image3d_id ));
+    }
+
+    var fullscreen3d_button = description.find('#fullscreen3d');
+    var image3d_url = next.find('.collection-thumbnail').attr('image-url');
+    if (fullscreen3d_button.length > 0) {
+        fullscreen3d_button.attr('image-url',image3d_url );
+    }  
+})
+
+$('#myCarousel2').carousel({
+  interval: false
+}).on('slid.bs.carousel', function () {
+    showOrHideNextPrevCarousel();
+});
+
+$(document).ajaxSend(function(event, xhr, settings) {
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie != '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = jQuery.trim(cookies[i]);
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) == (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    function sameOrigin(url) {
+        // url could be relative or scheme relative or absolute
+        var host = document.location.host; // host + port
+        var protocol = document.location.protocol;
+        var sr_origin = '//' + host;
+        var origin = protocol + sr_origin;
+        // Allow absolute or scheme relative URLs to same origin
+        return (url == origin || url.slice(0, origin.length + 1) == origin + '/') ||
+            (url == sr_origin || url.slice(0, sr_origin.length + 1) == sr_origin + '/') ||
+            // or any other URL that isn't scheme relative or absolute i.e relative.
+            !(/^(\/\/|http:|https:).*/.test(url));
+    }
+    function safeMethod(method) {
+        return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+    }
+
+    if (!safeMethod(settings.type) && sameOrigin(settings.url)) {
+        xhr.setRequestHeader("X-CSRFToken", getCookie('csrftoken'));
+    }
+});
+
+$('#flag-inappropriate-case').click(function(e) {
+    e.preventDefault();
+    var report_case_url = $(this).attr('href');
+    $.ajax({
+        url: report_case_url,
+        type: 'POST',
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                console.log(data);
+                var text = "case " + data['case_id'] + " flagged as inappropriate";
+                $('#flagMessage').html(text);
+                $('#caseFlagged').modal('show');
+            }
+        }
+    });
+});
+
+$('#flag-incorrect-case').click(function(e) {
+    e.preventDefault();
+    var report_case_url = $(this).attr('href');
+    $.ajax({
+        url: report_case_url,
+        type: 'POST',
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                console.log(data);
+                var text = "case " + data['case_id'] + " flagged as incorrect";
+                $('#flagMessage').html(text);
+
+                $('#caseFlagged').modal('show');
+            }
+        }
+    });
+});
+
+$('#update-hidden-status').click(function(e) {
+    e.preventDefault();
+    var update_hidden_status_url = $(this).attr('href');
+    $.ajax({
+        url: update_hidden_status_url,
+        type: 'POST',
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                var new_status = data['hidden']
+                if(new_status) {
+                    new_text = "Unhide";
+                    $('#update-hidden-status').html(new_text);
+
+                } else {
+                    new_text = "Hide";
+                    $('#update-hidden-status').html(new_text);
+                }
+            }
+        }
+    });
+
+});
+
+$( '#subuser_table').on('click', '.delete-subuser', function(e) {
+//$( '.delete-subuser' ).click(function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: $(this).attr('href'),
+        type: 'POST',
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                console.log(data);
+                var new_email = data['email']
+                var x=document.getElementById(new_email);
+                $(x).remove();
+            }
+        }
+    });
+});
+
+$("#manageSecurity").on('shown.bs.modal', function () {
+    var security = $(this).attr('security');
+    if (security == 3) {
+        $('#div1').text("Public")
+        $('#add_subuser').hide();
+    } else if (security == 1) {
+        $('#div1').text("Private")
+        $('#add_subuser').show();
+    }
+});
+
+var frm = $('#update_security_access')
+frm.submit(function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: frm.attr('action'), 
+        type: 'POST',
+        data: frm.serialize(), 
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                console.log(data);
+                if (data['security'] == 3) {
+                    $('#div1').text("Public")
+                    $('#add_subuser').hide();
+                    $("#manageSecurity").attr('security','3');
+                } else if(data['security'] == 1) {
+                    $('#div1').text("Private")
+                    $('#add_subuser').show();
+                    $("#manageSecurity").attr('security','1');
+                }
+            }
+        }
+    });
+    return false;
+});
+
+$('#update-macro-btn').click(function(e){
+    e.preventDefault();
+    $(this).addClass("hidden");
+    $('#macro-content').addClass("hidden")
+    $('#macro-template-form').removeClass("hidden")
+});
+
+$('#cancel-macro-btn').click(function(e){
+    e.preventDefault();
+    $('#update-macro-btn').removeClass("hidden");
+    $('#macro-content').removeClass("hidden")
+    $('#macro-template-form').addClass("hidden")
+});
+
+$('#update-micro-btn').click(function(e){
+    e.preventDefault();
+    $(this).addClass("hidden");
+    $('#micro-content').addClass("hidden")
+    $('#micro-template-form').removeClass("hidden")
+});
+
+$('#cancel-micro-btn').click(function(e){
+    e.preventDefault();
+    $('#update-micro-btn').removeClass("hidden");
+    $('#micro-content').removeClass("hidden")
+    $('#micro-template-form').addClass("hidden")
+});
+
+
+$(function() {
+    $('#myCarousel').tooltip({
+        selector: "[data-toggle=tooltip]",
+        container: "body"
+    });
+
+    $('#myCarousel').carousel({
+        interval: 10000
+    });
+});
+
+$(function() {
+    $('#myCarousel2').tooltip({
+        selector: "[data-toggle=tooltip]",
+        container: "body"
+    });
+
+    $('#myCarousel2').carousel({
+        interval: false
+    });
+});
+
+// $(function() {
+//     $.fn.raty.defaults.path = '/static/images';
+//     $('#star').raty({
+//         width : '150px',
+//         size : 24,
+//         score : function() {
+//             return $(this).attr('data-score');
+//         },
+//         {% if user.is_anonymous or user == case.user %}
+//         readOnly      : true,
+//         {% endif %}
+//         click : function(score, evt) {
+//             var current_rating = 0;
+//             if(score != null) {
+//                 current_rating = score;
+//             }
+
+//             var rate_url = "{% url 'rate_case' case.id '0'%}".replace('0', score.toString())
+//             console.log('Score', score, rate_url);
+//             $.ajax({
+//                 url: rate_url,
+//                 type: 'POST',
+//                 statusCode: {
+//                     403: function(jqXHR, text, error) {
+//                         console.log(error);
+//                     },
+//                     200: function(data, text, jqXHR) {
+//                         var new_score = data['score']
+//                         var new_votes = data['votes']
+//                         console.log(text, new_score, new_votes);
+//                         var new_text = new_votes + " (Score: 0)".replace('0', new_score);
+//                         $('#votes').html(new_text);
+//                     }
+//                 }
+//             });
+//         },
+//         cancel: false,
+//     });
+// });
+
+function submit_form(event, image_id) {
+    var form = $(event.target);
+    console.log(form.serialize());
+    $.ajax({
+        data: form.serialize(),
+        type: 'POST',
+        url: form.attr('action'),
+        statusCode: {
+            403: function(jqXHR, text, error) {
+                console.log(error);
+            },
+            200: function(data, text, jqXHR) {
+                console.log(data);
+                var e = form.parents('div .subtle-container');
+                e.find('.camera').html(data['camera']);
+                e.find('.microscope').html(data['microscope']);
+                e.find('.magnification').html(data['magnification']);
+                e.find('.stain').html(data['stain']);
+
+                // modifying image attributes
+                var elems = $('#myCarousel a');
+                for(var i = 0; i < elems.length; i++) {
+                    if (image_id == $(elems[i]).attr('image-id')) {
+                        $(elems[i]).attr('image-camera',data['camera']);
+                        $(elems[i]).attr('image-microscope',data['microscope']);
+                        $(elems[i]).attr('image-magnification',data['magnification']);
+                        $(elems[i]).attr('image-stain',data['stain']);
+
+                        // modifying tooltips title
+                        var title = 'Camera: ' + data['camera'] + '\nMicroscope: ' + data['microscope'] + '\nMagnification: ' + data['magnification'] + '\nStain: ' + data['stain'];
+                        $(elems[i]).find('img').attr('data-original-title', title);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    $(event.target).parent().parent().collapse('toggle');
+    $('#update-button').show();
+    return false;
+}
+
+$(function() {
+    $( "#sortable" ).sortable({
+        stop: function(event, ui) {
+            //alert("New position: " + ui.item.index());
+
+            //var list = $('this').map(function(){return $(this).attr("image-id");}).get();
+            var list =$("li.ui-sortable-handle a").map(function(){return $(this).attr("image-id");}).get();
+
+            var image_ids = ""
+            for(var i = 0; i < list.length; i++) {
+                        image_ids += list[i] +";"
+            }
+            var update_href = "/cases/update_display_index/" + image_ids + "/";
+            $.ajax({
+                url: update_href,
+                type: 'POST',
+                statusCode: {
+                    403: function(jqXHR, text, error) {
+                        console.log(error);
+                    },
+                    200: function(data, text, jqXHR) {
+                        console.log("display index updated");
+                    }
+                }
+            });
+        }
+    });
+    //$( "#sortable" ).disableSelection();
+});
+
+$('.close').click(function (e) {
+    e.preventDefault();
+    $(this).parent().parent().collapse('toggle');
+    $('#update-button').show();
+});
